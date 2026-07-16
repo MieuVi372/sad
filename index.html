@@ -58,6 +58,7 @@
         .p1-card { border-color: #ff4444; color: #ff4444; }
         .p2-card { border-color: #4444ff; color: #4444ff; }
         .p3-card { border-color: #ffff44; color: #ffff44; }
+        .bot-tag { font-size: 0.65rem; background: rgba(255,255,255,0.15); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
 
         .powerup-info { display: flex; flex-direction: column; gap: 8px; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;}
         .powerup-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
@@ -99,15 +100,15 @@
         </div>
 
         <div class="controls-info">
-            <div class="player-card p1-card">
+            <div class="player-card p1-card" id="card-p1">
                 <div class="font-bold">Player 1 (Đỏ)</div>
                 <div class="text-white text-sm font-mono mt-1">W A S D</div>
             </div>
-            <div class="player-card p2-card">
+            <div class="player-card p2-card" id="card-p2">
                 <div class="font-bold">Player 2 (Xanh)</div>
                 <div class="text-white text-sm font-mono mt-1">MŨI TÊN</div>
             </div>
-            <div class="player-card p3-card">
+            <div class="player-card p3-card" id="card-p3">
                 <div class="font-bold">Player 3 (Vàng)</div>
                 <div class="text-white text-sm font-mono mt-1">I J K L<br>(Lên, Trái, Xuống, Phải)</div>
             </div>
@@ -121,8 +122,13 @@
 
     <!-- Start Screen -->
     <div id="start-screen">
-        <h1 class="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-8 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">CUBIC BOOM</h1>
-        <button class="btn-primary" onclick="startCountdown()">BẮT ĐẦU CHƠI</button>
+        <h1 class="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-4 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">CUBIC BOOM</h1>
+        <p class="text-white text-lg mb-2 opacity-80">Chọn chế độ chơi:</p>
+        <div class="flex flex-col gap-3 items-center">
+            <button class="btn-primary !mt-0 !py-3 !px-8 !text-lg" onclick="startCountdown(1)">1 NGƯỜI (VS 2 BOT)</button>
+            <button class="btn-primary !mt-0 !py-3 !px-8 !text-lg" onclick="startCountdown(2)">2 NGƯỜI</button>
+            <button class="btn-primary !mt-0 !py-3 !px-8 !text-lg" onclick="startCountdown(3)">3 NGƯỜI</button>
+        </div>
     </div>
 
     <!-- Countdown Screen -->
@@ -143,10 +149,11 @@
         let characters = [];
         
         // Trạng thái game
-        let gameTime = 120; // 120 giây
+        let gameTime = 120;
         let isGameOver = false;
         let isStarted = false; 
         let lastTime = 0;
+        let gameMode = 3;
         
         // Trạng thái vật phẩm bổ trợ
         let items = [];
@@ -160,7 +167,7 @@
         let bombControlPoint = new THREE.Vector3();
         let passCooldown = 0; 
 
-        // 3 Bộ Input độc lập
+        // Bộ Input
         const keysP1 = { w: false, a: false, s: false, d: false };
         const keysP2 = { up: false, left: false, down: false, right: false };
         const keysP3 = { i: false, j: false, k: false, l: false };
@@ -169,6 +176,9 @@
         const CUBE_RADIUS = CUBE_SIZE / 2;
         const CHAR_RADIUS = 0.5;
         const BASE_SPEED = 0.15;
+
+        // Tên nhân vật
+        const CHAR_NAMES = ["Player 1 (Đỏ)", "Player 2 (Xanh)", "Player 3 (Vàng)"];
 
         function init() {
             scene = new THREE.Scene();
@@ -186,28 +196,23 @@
             dirLight.position.set(20, 30, 20);
             scene.add(dirLight);
 
-            // Khối Lập Phương Trong Suốt
             const cubeGeo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
             const cubeMat = new THREE.MeshStandardMaterial({ 
-                color: 0x88ccff, // Màu xanh kính
+                color: 0x88ccff,
                 roughness: 0.1,
                 metalness: 0.1,
                 transparent: true, 
-                opacity: 0.25, // Độ trong suốt
-                emissive: 0x004488, // Phát sáng nhẹ
+                opacity: 0.25,
+                emissive: 0x004488,
                 emissiveIntensity: 0.5,
-                side: THREE.DoubleSide // Nhìn thấy cả 2 mặt
+                side: THREE.DoubleSide
             });
             cube = new THREE.Mesh(cubeGeo, cubeMat);
             const edges = new THREE.EdgesGeometry(cubeGeo);
-            // Viền sáng hơn
             const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x0ea5e9, linewidth: 2 }));
             cube.add(line);
             scene.add(cube);
 
-            createCharacters();
-            
-            // Bom
             const bombGeo = new THREE.SphereGeometry(0.5, 16, 16);
             const bombMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xaa0000 });
             bomb = new THREE.Mesh(bombGeo, bombMat);
@@ -219,47 +224,79 @@
             animate();
         }
 
-        function createCharacters() {
+        function createCharacters(mode) {
             const charGeo = new THREE.BoxGeometry(1, 1, 1); 
-            
-            const p1Mat = new THREE.MeshStandardMaterial({ color: 0xff4444 }); // Đỏ
-            const p2Mat = new THREE.MeshStandardMaterial({ color: 0x4444ff }); // Xanh
-            const p3Mat = new THREE.MeshStandardMaterial({ color: 0xffff44 }); // Vàng
+            const colors = [0xff4444, 0x4444ff, 0xffff44];
+            const startPositions = [
+                new THREE.Vector3(0, CUBE_RADIUS + CHAR_RADIUS, 0),
+                new THREE.Vector3(CUBE_RADIUS + CHAR_RADIUS, 0, 0),
+                new THREE.Vector3(0, 0, CUBE_RADIUS + CHAR_RADIUS)
+            ];
+            const startUp = [
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(1, 0, 0),
+                new THREE.Vector3(0, 0, 1)
+            ];
 
-            const p1 = new THREE.Mesh(charGeo, p1Mat);
-            const p2 = new THREE.Mesh(charGeo, p2Mat);
-            const p3 = new THREE.Mesh(charGeo, p3Mat);
+            const count = mode;
+            for (let i = 0; i < count; i++) {
+                const mat = new THREE.MeshStandardMaterial({ color: colors[i] });
+                const mesh = new THREE.Mesh(charGeo, mat);
+                mesh.position.copy(startPositions[i]);
+                mesh.userData = { 
+                    currentUp: startUp[i].clone(), 
+                    speed: BASE_SPEED,
+                    isBot: mode === 1 && i > 0,
+                    botTimer: 0,
+                    botTarget: new THREE.Vector3()
+                };
+                characters.push(mesh);
+                scene.add(mesh);
+            }
+        }
 
-            p1.position.set(0, CUBE_RADIUS + CHAR_RADIUS, 0);
-            p1.userData = { currentUp: new THREE.Vector3(0, 1, 0), speed: BASE_SPEED };
-            
-            p2.position.set(CUBE_RADIUS + CHAR_RADIUS, 0, 0);
-            p2.userData = { currentUp: new THREE.Vector3(1, 0, 0), speed: BASE_SPEED };
-
-            p3.position.set(0, 0, CUBE_RADIUS + CHAR_RADIUS);
-            p3.userData = { currentUp: new THREE.Vector3(0, 0, 1), speed: BASE_SPEED };
-
-            characters.push(p1, p2, p3);
-            scene.add(p1, p2, p3);
+        function updateControlsDisplay(mode) {
+            const cards = [
+                document.getElementById('card-p1'),
+                document.getElementById('card-p2'),
+                document.getElementById('card-p3')
+            ];
+            cards.forEach((card, i) => {
+                if (i < mode) {
+                    card.style.display = 'block';
+                    const botTag = card.querySelector('.bot-tag');
+                    if (mode === 1 && i > 0) {
+                        if (!botTag) {
+                            const tag = document.createElement('span');
+                            tag.className = 'bot-tag';
+                            tag.textContent = 'BOT';
+                            card.querySelector('.font-bold').appendChild(tag);
+                        }
+                        const keyInfo = card.querySelector('.text-white');
+                        if (keyInfo) keyInfo.textContent = 'BOT (AI)';
+                    } else {
+                        const bt = card.querySelector('.bot-tag');
+                        if (bt) bt.remove();
+                    }
+                } else {
+                    card.style.display = 'none';
+                }
+            });
         }
 
         function setupInputs() {
             window.addEventListener('keydown', (e) => {
                 const k = e.key.toLowerCase();
-                
-                // P1: WASD
                 if (k === 'w') keysP1.w = true;
                 if (k === 'a') keysP1.a = true;
                 if (k === 's') keysP1.s = true;
                 if (k === 'd') keysP1.d = true;
 
-                // P2: Arrows
                 if (e.key === 'ArrowUp') keysP2.up = true;
                 if (e.key === 'ArrowLeft') keysP2.left = true;
                 if (e.key === 'ArrowDown') keysP2.down = true;
                 if (e.key === 'ArrowRight') keysP2.right = true;
 
-                // P3: IJKL (I=Lên, J=Trái, K=Xuống, L=Phải)
                 if (k === 'i') keysP3.i = true;
                 if (k === 'j') keysP3.j = true;
                 if (k === 'k') keysP3.k = true;
@@ -285,7 +322,11 @@
             });
         }
 
-        function startCountdown() {
+        function startCountdown(mode) {
+            gameMode = mode;
+            createCharacters(mode);
+            updateControlsDisplay(mode);
+
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('countdown-screen').style.display = 'flex';
             
@@ -309,7 +350,7 @@
                     document.getElementById('countdown-screen').style.display = 'none';
                     isStarted = true;
                     lastTime = Date.now();
-                    lastItemSpawnTime = 120; // Khởi tạo mốc spawn vật phẩm đầu tiên
+                    lastItemSpawnTime = 120;
                 }
             }, 1000);
         }
@@ -325,7 +366,6 @@
             });
             const mesh = new THREE.Mesh(geo, mat);
             
-            // Random mặt phẳng
             const face = Math.floor(Math.random() * 6);
             let x = (Math.random() - 0.5) * CUBE_SIZE * 0.8;
             let y = (Math.random() - 0.5) * CUBE_SIZE * 0.8;
@@ -381,13 +421,74 @@
             setTimeout(() => alertEl.classList.remove('show'), 1000);
         }
 
+        function getBotDirection(char, index) {
+            let dir = new THREE.Vector3();
+            const hasBomb = index === bombHolderIndex;
+            let target = null;
+
+            if (hasBomb) {
+                // Chạy đến người khác gần nhất để truyền bom
+                let minDist = Infinity;
+                for (let i = 0; i < characters.length; i++) {
+                    if (i !== index) {
+                        const d = char.position.distanceTo(characters[i].position);
+                        if (d < minDist) { minDist = d; target = characters[i]; }
+                    }
+                }
+            } else {
+                // Chạy xa người giữ bom
+                const holder = characters[bombHolderIndex];
+                const dist = char.position.distanceTo(holder.position);
+                if (dist < 6) {
+                    dir.subVectors(char.position, holder.position).normalize();
+                }
+                // Nhặt item gần đó nếu có
+                let nearItem = null;
+                let nearDist = 4;
+                for (const item of items) {
+                    const d = char.position.distanceTo(item.position);
+                    if (d < nearDist) { nearDist = d; nearItem = item; }
+                }
+                if (nearItem) {
+                    dir.addVectors(nearItem.position, dir).normalize();
+                }
+                char.userData.botTimer--;
+                if (char.userData.botTimer <= 0 || dir.lengthSq() < 0.1) {
+                    const randDir = new THREE.Vector3(
+                        (Math.random() - 0.5),
+                        (Math.random() - 0.5),
+                        (Math.random() - 0.5)
+                    ).normalize();
+                    dir.add(randDir);
+                    char.userData.botTimer = 30 + Math.floor(Math.random() * 60);
+                }
+                return dir;
+            }
+
+            if (target) {
+                dir.subVectors(target.position, char.position).normalize();
+            }
+            
+            char.userData.botTimer--;
+            if (char.userData.botTimer <= 0) {
+                const randDir = new THREE.Vector3(
+                    (Math.random() - 0.5),
+                    (Math.random() - 0.5),
+                    (Math.random() - 0.5)
+                ).normalize();
+                dir.add(randDir.multiplyScalar(0.5));
+                char.userData.botTimer = 20 + Math.floor(Math.random() * 40);
+            }
+            
+            return dir;
+        }
+
         function updatePhysicsAndGravity() {
             if (!isStarted || isGameOver) return;
 
-            // Xử lý Cooldown chạm truyền bom
             if (passCooldown > 0) passCooldown--;
 
-            // KIỂM TRA CHẠM TRUYỀN BOM (Khoảng cách phải rất gần < 1.3)
+            // Kiểm tra chạm truyền bom
             if (!bombPassing && passCooldown <= 0) {
                 const holder = characters[bombHolderIndex];
                 for (let i = 0; i < characters.length; i++) {
@@ -395,14 +496,14 @@
                         const dist = holder.position.distanceTo(characters[i].position);
                         if (dist < 1.3) { 
                             passBombTo(i);
-                            passCooldown = 40; // Tránh nảy liên tục
+                            passCooldown = 40;
                             break; 
                         }
                     }
                 }
             }
             
-            // Cập nhật Item (Xoay và va chạm)
+            // Cập nhật Item
             for (let i = items.length - 1; i >= 0; i--) {
                 let item = items[i];
                 item.rotation.x += 0.05;
@@ -410,20 +511,18 @@
                 
                 characters.forEach((char, cIdx) => {
                     if (char.position.distanceTo(item.position) < 1.5) {
-                        // Kích hoạt Item
                         if (item.userData.type === 'speed') {
                             char.userData.speed = BASE_SPEED * 2.5; 
                             showItemAlert(`P${cIdx+1} TỐC BIẾN!`, '#10b981');
                             setTimeout(() => { char.userData.speed = BASE_SPEED; }, 10000);
                         } else if (item.userData.type === 'swap') {
-                            let otherIdx = (cIdx + Math.floor(Math.random() * 2) + 1) % 3;
+                            let maxIdx = characters.length - 1;
+                            let otherIdx = (cIdx + Math.floor(Math.random() * maxIdx) + 1) % characters.length;
                             let otherChar = characters[otherIdx];
                             
-                            // Lưu trữ tạm
                             let tempPos = char.position.clone();
                             let tempUp = char.userData.currentUp.clone();
                             
-                            // Đổi chỗ
                             char.position.copy(otherChar.position);
                             char.userData.currentUp.copy(otherChar.userData.currentUp);
                             otherChar.position.copy(tempPos);
@@ -438,36 +537,35 @@
                 });
             }
 
-            // Hướng Camera để quy chiếu phím di chuyển
             let camDir = new THREE.Vector3();
             camera.getWorldDirection(camDir);
             let globalRight = new THREE.Vector3().crossVectors(camDir, new THREE.Vector3(0,1,0)).normalize();
 
-            // Cập nhật từng người chơi
             characters.forEach((char, index) => {
                 let moveDir = new THREE.Vector3();
-                
-                // Lọc input theo ID
-                let keyUp = (index === 0) ? keysP1.w : (index === 1) ? keysP2.up : keysP3.i;
-                let keyDown = (index === 0) ? keysP1.s : (index === 1) ? keysP2.down : keysP3.k;
-                let keyLeft = (index === 0) ? keysP1.a : (index === 1) ? keysP2.left : keysP3.j;
-                let keyRight = (index === 0) ? keysP1.d : (index === 1) ? keysP2.right : keysP3.l;
 
-                // Tính toán hướng di chuyển dựa trên mặt phẳng hiện tại
-                let localRight = globalRight.clone().projectOnPlane(char.userData.currentUp).normalize();
-                let localForward = new THREE.Vector3().crossVectors(char.userData.currentUp, localRight).normalize();
-                
-                let projectedCamDir = camDir.clone().projectOnPlane(char.userData.currentUp).normalize();
-                if (localForward.dot(projectedCamDir) < 0) {
-                    localForward.negate();
+                if (char.userData.isBot) {
+                    moveDir = getBotDirection(char, index);
+                } else {
+                    let keyUp, keyDown, keyLeft, keyRight;
+                    if (index === 0) { keyUp = keysP1.w; keyDown = keysP1.s; keyLeft = keysP1.a; keyRight = keysP1.d; }
+                    else if (index === 1) { keyUp = keysP2.up; keyDown = keysP2.down; keyLeft = keysP2.left; keyRight = keysP2.right; }
+                    else { keyUp = keysP3.i; keyDown = keysP3.k; keyLeft = keysP3.j; keyRight = keysP3.l; }
+
+                    let localRight = globalRight.clone().projectOnPlane(char.userData.currentUp).normalize();
+                    let localForward = new THREE.Vector3().crossVectors(char.userData.currentUp, localRight).normalize();
+                    
+                    let projectedCamDir = camDir.clone().projectOnPlane(char.userData.currentUp).normalize();
+                    if (localForward.dot(projectedCamDir) < 0) {
+                        localForward.negate();
+                    }
+
+                    if (keyUp) moveDir.add(localForward);
+                    if (keyDown) moveDir.sub(localForward);
+                    if (keyLeft) moveDir.sub(localRight);
+                    if (keyRight) moveDir.add(localRight);
                 }
 
-                if (keyUp) moveDir.add(localForward);
-                if (keyDown) moveDir.sub(localForward);
-                if (keyLeft) moveDir.sub(localRight);
-                if (keyRight) moveDir.add(localRight);
-
-                // Bản sao vị trí tiếp theo (để tính toán Gravity trước khi áp dụng)
                 let nextPos = char.position.clone();
                 let isMoving = moveDir.lengthSq() > 0;
 
@@ -476,7 +574,6 @@
                     nextPos.add(moveDir.multiplyScalar(char.userData.speed));
                 }
 
-                // --- TÍNH TOÁN TRỌNG LỰC CỰC KỲ MƯỢT (LARGEST AXIS ALGORITHM) ---
                 let absX = Math.abs(nextPos.x);
                 let absY = Math.abs(nextPos.y);
                 let absZ = Math.abs(nextPos.z);
@@ -484,7 +581,6 @@
                 let targetNormal = new THREE.Vector3();
                 const limit = CUBE_RADIUS + CHAR_RADIUS;
 
-                // Xác định mặt phẳng dựa trên tọa độ lớn nhất
                 if (absX >= absY && absX >= absZ) {
                     targetNormal.set(Math.sign(nextPos.x), 0, 0);
                 } else if (absY >= absX && absY >= absZ) {
@@ -493,7 +589,6 @@
                     targetNormal.set(0, 0, Math.sign(nextPos.z));
                 }
 
-                // Ép nhân vật dính chặt vào mặt phẳng đó (Bỏ các giới hạn chặn góc)
                 if (Math.abs(targetNormal.x) > 0) {
                     nextPos.x = targetNormal.x * limit;
                 } else if (Math.abs(targetNormal.y) > 0) {
@@ -502,23 +597,20 @@
                     nextPos.z = targetNormal.z * limit;
                 }
 
-                // Cập nhật vị trí và trục hướng lên MỚI
                 char.position.copy(nextPos);
                 if (!char.userData.currentUp.equals(targetNormal)) {
                     char.userData.currentUp.copy(targetNormal); 
                 }
 
-                // --- ÁP DỤNG XOAY NHÂN VẬT SAU KHI ĐÃ CẬP NHẬT TRỌNG LỰC ---
                 if (isMoving) {
-                    // Xoay mặt nhân vật theo hướng di chuyển và trục UP mới
                     const m = new THREE.Matrix4();
-                    const zAxis = moveDir.clone().negate(); // Model faces Z
-                    const yAxis = char.userData.currentUp; // Sử dụng trục UP mới nhất
+                    const zAxis = moveDir.clone().negate();
+                    const yAxis = char.userData.currentUp;
                     const xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis).normalize();
                     zAxis.crossVectors(xAxis, yAxis).normalize();
                     m.makeBasis(xAxis, yAxis, zAxis);
                     const targetQuat = new THREE.Quaternion().setFromRotationMatrix(m);
-                    char.quaternion.copy(targetQuat); // Bẻ góc ngay lập tức
+                    char.quaternion.copy(targetQuat);
                 }
             });
 
@@ -547,7 +639,6 @@
 
             gameTime -= delta;
             
-            // LOGIC SINH VẬT PHẨM (MỖI 30 GIÂY)
             if (lastItemSpawnTime - gameTime >= 30) {
                 spawnItem();
                 lastItemSpawnTime = gameTime;
@@ -565,8 +656,11 @@
                 
                 setTimeout(() => {
                     document.getElementById('game-over-screen').style.display = 'flex';
-                    const names = ["Player 1 (Đỏ)", "Player 2 (Xanh)", "Player 3 (Vàng)"];
-                    document.getElementById('game-over-text').innerText = `${names[bombHolderIndex]} đã bị nổ tung!`;
+                    let name = CHAR_NAMES[bombHolderIndex];
+                    if (characters[bombHolderIndex] && characters[bombHolderIndex].userData.isBot) {
+                        name = name.replace(')', ', BOT)');
+                    }
+                    document.getElementById('game-over-text').innerText = `${name} đã bị nổ tung!`;
                 }, 500);
                 return;
             }
@@ -585,9 +679,9 @@
         }
 
         function updateCamera() {
+            if (characters.length === 0) return;
             const activeChar = characters[bombHolderIndex];
             
-            // GÓC NHÌN THỨ 3 (ISOMETRIC CỐ ĐỊNH)
             camera.up.set(0, 1, 0); 
             const goalPos = activeChar.position.clone().add(new THREE.Vector3(25, 25, 25));
                             
